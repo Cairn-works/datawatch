@@ -497,6 +497,40 @@ established. In progress — starting with BL403.**
    `Decompose()`/`DecomposeStreaming()`. BL413 is the *scanner* half
    of that same original promise — a genuinely new rule-type design,
    correctly deferred rather than improvised.
+13. **BL414** — PRD-Decision Cost Rollup + Token Usage Observability &
+   Guardrails (filed 2026-10-11, operator-raised reviewing BL403/BL404's
+   real runs: "should I see token spend on PRD decisions history?").
+   Found live: `autonomous.Decision.CostUSD`
+   (`internal/autonomous/models.go:57`) is a real schema field with
+   zero writers anywhere in the codebase — a `decompose`/`run` Decision
+   never gets the cost of the LLM call(s) it actually triggered. Real
+   cost tracking *does* exist, just one level down and not rolled up:
+   `internal/session`'s `EstCostUSD` (per-session running total,
+   `cost_summary`/`cost_usage` MCP + `/api/cost/*` REST) is live and
+   accurate for claude-code specifically (B98 fixed it — scrapes the
+   real Claude Code JSONL transcript every 10s instead of the never-
+   called manual-only path B98 found). A PRD's `decompose`/task-run
+   Decisions have no link back to the session(s)/cost they spent.
+   **Operator direction, not yet designed**: this needs to become a
+   real iteration — where token usage is *reported* (PRD Decisions
+   rollup is one surface, not the only one), a dashboard/observability
+   story (so spend is visible without querying `cost_summary` by hand),
+   and **token guardrails** (budget ceilings, alerts, maybe hard stops)
+   tied to the same data. **Explicitly not a fresh design from zero**:
+   `docs/plans/2026-10-10-llm-enhancements.md` (BL405) already has
+   deep, adjacent work in this exact space — Phase 4 (per-call usage
+   record store, richer than the session-level aggregate this gap
+   would roll up from), Phase 5 (local-compute $/GPU-hour cost model),
+   Phase 9 (alerting hooks already named `cost_burn_rate`/
+   `token_budget_remaining`/`model_error_rate` — literally the
+   "guardrail" signals being asked for here), and Phase 10 (dashboard
+   cross-reference into BL403's widget surface). BL414 should be
+   scoped as the PRD-lifecycle-specific slice (Decision rollup +
+   whatever's missing after BL405 ships) and sequenced alongside or
+   right after BL405, not as a parallel/competing design — needs an
+   operator discussion pass (same shape as BL412/BL413) before a plan
+   doc gets written: which of BL405's phases already cover this vs.
+   what's genuinely a new gap.
 
 **Outside the queue, handled separately, not blocking Stage 3:**
 - ~~**BL381**~~ — status-verified 2026-10-10: shipped v8.28.0 + v8.28.2
