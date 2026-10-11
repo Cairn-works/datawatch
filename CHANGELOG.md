@@ -5,6 +5,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## v9.0.27 — fix(server): B120 — explicit clear-to-zero on an autonomous.* field never reached the live manager
+
+### Fixed
+- Found live immediately after v9.0.26's own B116-fix landed, while
+  clearing `autonomous.planning_model` back to `""` after switching
+  `planning_backend` to `claude-code`: the `PUT /api/config` call
+  reported success and persisted the empty string to YAML correctly,
+  but the live `autonomous.Manager` kept serving the stale value
+  forever. Root cause: B116's scoped-propagation fix reads each
+  touched field's current value from a marshal of the whole
+  `autonomous.Config` struct — but a field whose value happens to be
+  its zero value is, by design, **omitted** from that marshal by its
+  own `omitempty` tag, so the explicit "clear this back to empty"
+  never made it into the scoped partial JSON sent to the live
+  manager.
+- Fixed with `autonomousFieldJSONByTag`, a small reflection-based
+  fallback that encodes a touched field's zero value directly
+  (bypassing `omitempty`) when it's missing from the normal marshal.
+  1 new test in `internal/server/autonomous_config_propagation_test.go`.
+
 ## v9.0.26 — fix(autonomous): B118/B119 — worktree-at-decompose + orphan cleanup, execution_backend config surface
 
 ### Fixed

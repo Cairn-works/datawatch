@@ -105,6 +105,43 @@ func TestHandlePutConfig_AutonomousPropagation_NestedKeyForwardsWholeObject(t *t
 	}
 }
 
+// B120 — found live 2026-10-11 immediately after B116's own fix
+// shipped: clearing a touched omitempty field back to its zero value
+// (e.g. autonomous.planning_model: "" to go back to a backend's own
+// default) was itself omitted from the scoped partial JSON, since a
+// normal marshal of the whole struct drops a zero-valued omitempty
+// field entirely — so the explicit clear never reached the live
+// manager, which kept serving its stale non-empty value forever.
+func TestHandlePutConfig_AutonomousPropagation_ExplicitClearToZeroForwarded(t *testing.T) {
+	spy := &autonomousConfigPropagationSpy{}
+	s := &Server{
+		cfg: &config.Config{
+			Autonomous: config.AutonomousConfig{PlanningModel: "ollama/qwen3.8:27b"},
+		},
+		cfgPath:       t.TempDir() + "/config.yaml",
+		autonomousMgr: spy,
+	}
+	patch, _ := json.Marshal(map[string]string{"autonomous.planning_model": ""})
+	req := httptest.NewRequest(http.MethodPut, "/api/config", bytes.NewReader(patch))
+	rr := httptest.NewRecorder()
+	s.handlePutConfig(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	var forwarded map[string]json.RawMessage
+	if err := json.Unmarshal(spy.lastSetConfig, &forwarded); err != nil {
+		t.Fatalf("decode propagated payload: %v", err)
+	}
+	v, ok := forwarded["planning_model"]
+	if !ok {
+		t.Fatalf("planning_model must be forwarded even when cleared to its zero value, got keys=%v", forwarded)
+	}
+	if string(v) != `""` {
+		t.Errorf("planning_model must be forwarded as an explicit empty string, got %s", v)
+	}
+}
+
 // No autonomous.* key in the patch at all: SetConfig must not be
 // called (nothing for it to clobber).
 func TestHandlePutConfig_AutonomousPropagation_NoAutonomousKeyNoCall(t *testing.T) {

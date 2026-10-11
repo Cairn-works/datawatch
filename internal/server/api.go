@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -187,7 +188,7 @@ type mcpBridgeAPI interface {
 var startTime = time.Now()
 
 // Version is set at build time. The server package uses this for /api/health and /api/info.
-var Version = "9.0.26"
+var Version = "9.0.27"
 
 // Server holds all HTTP handler dependencies
 type Server struct {
@@ -5725,6 +5726,17 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 				for top := range touchedTop {
 					if v, ok := fullMap[top]; ok {
 						partial[top] = v
+					} else if v, ok := autonomousFieldJSONByTag(s.cfg.Autonomous, top); ok {
+						// Found live 2026-10-11: a touched field whose
+						// CURRENT value is its zero value (an explicit
+						// "clear this back to empty" PUT, e.g.
+						// autonomous.planning_model: "") is omitted from
+						// fullMap entirely by that very field's own
+						// omitempty tag — so the clear never reached the
+						// live manager, which kept serving its stale
+						// value. Encode the zero value directly instead
+						// of skipping it.
+						partial[top] = v
 					}
 				}
 				if b, err := json.Marshal(partial); err == nil {
@@ -5815,6 +5827,31 @@ func (s *Server) applyLLMRegistryPatch(patch map[string]interface{}) {
 	} else {
 		_ = s.inferenceReg.Update(cl)
 	}
+}
+
+// autonomousFieldJSONByTag returns the JSON encoding of cfg's field
+// whose "json" struct tag's name segment matches tag, regardless of
+// that field's own omitempty option — used as a fallback by the
+// autonomous.* config-write propagation above when a touched field's
+// current value happens to be its zero value: a normal marshal of
+// the whole struct omits it (that's what omitempty is for), which
+// would otherwise make an explicit "clear this back to empty" PUT
+// silently never reach the live manager. Found live 2026-10-11.
+func autonomousFieldJSONByTag(cfg config.AutonomousConfig, tag string) (json.RawMessage, bool) {
+	rv := reflect.ValueOf(cfg)
+	rt := rv.Type()
+	for i := 0; i < rt.NumField(); i++ {
+		name, _, _ := strings.Cut(rt.Field(i).Tag.Get("json"), ",")
+		if name == "" || name == "-" || name != tag {
+			continue
+		}
+		b, err := json.Marshal(rv.Field(i).Interface())
+		if err != nil {
+			return nil, false
+		}
+		return b, true
+	}
+	return nil, false
 }
 
 // applyConfigPatch applies dot-path key/value pairs from patch to cfg.
