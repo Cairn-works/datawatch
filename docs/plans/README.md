@@ -998,13 +998,27 @@ _2026-05-02 operator-filed items promoted directly to BL218–BL221. 2026-05-03 
 > **Fixed v9.0.28** (decomposer half): new
 > `internal/autonomous/rules_context.go` resolves `RulesFile` (default
 > `AGENT.md`, always applied) and `ContextFile` (default `CONTEXT.md`,
-> only when present) relative to each PRD's own `project_dir` and
-> injects their content into the planning prompt for both
-> `Decompose()`/`DecomposeStreaming()`, capped per-file so an unusually
-> large rules file can't blow the context budget. 6 new tests in new
-> `internal/autonomous/rules_context_test.go`. The scanner half (BL406's
-> other promised consumer) needs a genuinely new rule type — filed as
-> **BL413**, not improvised. No longer open.
+> only when present) relative to each PRD's own `project_dir`. The
+> scanner half (BL406's other promised consumer) needs a genuinely new
+> rule type — filed as **BL413**, not improvised.
+> **Revised same day, v9.0.30** (operator-raised: "do we need to
+> directly inject agent and context, or just point to the files?"):
+> the v9.0.28 fix inlined the full file content (~160KB combined on
+> this repo) into the planning prompt — the direct trigger for
+> **B122**'s tmux chunked-paste corruption, and B122's own timing fix
+> alone wasn't sufficient (confirmed live: a second, larger inlined
+> prompt still corrupted claude-code's input rendering at ~26 chunks).
+> A session-based decompose backend is already running *in*
+> `project_dir` with its own file-reading tools, so there's no need to
+> pre-digest file content into the prompt at all. Now emits a short
+> pointer ("read AGENT.md and DATAWATCH-CONTEXT.md...") instead —
+> eliminates the oversized-payload problem at its root rather than
+> just tuning timing around it. Confirmed in the same investigation
+> that decompose already reuses the exact same one-shot session
+> delivery path (`POST /api/sessions/start`, `one_shot: true`) every
+> other one-shot task uses, per the Reuse-and-Expand rule — not a
+> bespoke code path needing its own fix. Tests rewritten for the new
+> pointer-only behavior. No longer open.
 
 > **B122** — B121's own large-prompt injection (full `AGENT.md`/
 > `DATAWATCH-CONTEXT.md` content into every decompose call, ~160KB)
