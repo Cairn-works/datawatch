@@ -174,7 +174,7 @@ Previous: **v8.25.3** (2026-09-12). feat(observer): nvidia-smi and tegrastats GP
 
  | Bucket | Count | Notes |
 |---|---|---|
-| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. None open |
+| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. B117 (PRD creation rejected the exact empty-project_dir case BL407 Phase 1's worktree auto-assignment is designed for) — fixed v9.0.25. None open |
 | Open features | 7 | BL241 Matrix (design interview needed); BL365 + BL408 + BL395 security remediation track (roadmap Stage 3 #7); BL390 Phase 2/3 (folded into BL405 Phase 8a); BL393 nested tags (excluded until authorized); BL394 + BL392 (substantially done, residue cross-repo). BL389 shipped v9.0.0; BL381 shipped v8.28.0/v8.28.2 |
 | Active backlog | 0 | BL387 complete (v8.31–33.0 ✅) |
 | Pending backlog | 5 | BL402, BL403, BL404, BL405 (v10.0.0 roadmap; BL406 shipped v9.0.17, BL407 shipped v9.0.23) + BL398 Phase 2; BL400 deferred (open questions). BL335 shipped v8.62.x via BL397 Phase 4 |
@@ -810,6 +810,23 @@ _2026-05-02 operator-filed items promoted directly to BL218–BL221. 2026-05-03 
 > `autonomous.default_quality_gates.enabled` forwards the whole
 > `default_quality_gates` object, not a literal dotted key. 3 new
 > tests in `internal/server/autonomous_config_propagation_test.go`. No
+> longer open.
+
+> **B117** — `POST /api/autonomous/prds` (every surface proxies through
+> one handler: REST, MCP's `autonomous_prd_create`, CLI, comm, PWA)
+> hard-rejected a PRD with no `project_dir`/`project_profile` as "project_dir
+> or project_profile required" — a v5.26.19 check that predates, and was
+> never updated for, BL407 Phase 1's worktree auto-assignment (Decision 2):
+> when `project_dir` is empty and `autonomous.worktree_base_repo` is
+> configured, `Manager.Run()` creates a dedicated git worktree and
+> backfills `ProjectDir` itself at run time. As written, no PRD could ever
+> reach that path — creation failed before `Run()` got a chance. Found live
+> 2026-10-11 creating BL404's PRD, the deliberate first real shakedown of
+> worktree mode. **Fixed v9.0.25**: loosened the creation-time check to
+> also allow an empty `project_dir`/`project_profile` when `cluster_profile`
+> is unset *and* `autonomous.worktree_base_repo` is configured; every other
+> case (no worktree config, or `cluster_profile` alone) is unchanged. 4 new
+> tests in `internal/server/autonomous_prd_create_worktree_test.go`. No
 > longer open.
 
 _(Otherwise no open bugs as of the 2026-10-09/10 backlog refactor —

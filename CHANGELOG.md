@@ -5,6 +5,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## v9.0.25 — fix(autonomous): B117 — PRD creation blocked worktree-mode PRDs with no work-source error
+
+### Fixed
+- `POST /api/autonomous/prds` (all surfaces: REST, MCP's
+  `autonomous_prd_create`, CLI, comm, PWA — they all proxy through this
+  one handler) hard-rejected a PRD with no `project_dir`/
+  `project_profile` as "project_dir or project_profile required" — a
+  v5.26.19 check that predates, and was never updated for, BL407 Phase
+  1's worktree auto-assignment (Decision 2): when `project_dir` is
+  empty and `autonomous.worktree_base_repo` is configured,
+  `Manager.Run()` is supposed to create a dedicated git worktree and
+  backfill `ProjectDir` itself at run time. As written, no PRD could
+  ever reach that path — creation failed before `Run()` got a chance.
+  Found live 2026-10-11 creating BL404's PRD, the deliberate first real
+  shakedown of worktree mode.
+- Fixed by loosening the creation-time check to also allow an empty
+  `project_dir`/`project_profile` when `cluster_profile` is unset *and*
+  `autonomous.worktree_base_repo` is configured. Every other case
+  (no worktree config, or `cluster_profile` alone) is unchanged.
+- 4 new tests in `internal/server/autonomous_prd_create_worktree_test.go`.
+
 ## v9.0.24 — fix(autonomous): B116 — config-write propagation clobbered live-only bool defaults
 
 ### Fixed

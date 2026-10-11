@@ -150,8 +150,26 @@ func (s *Server) handleAutonomousPRDs(w http.ResponseWriter, r *http.Request) {
 			// clone (worker side); cluster_profile alone is invalid
 			// because there's no source code to work on.
 			if strings.TrimSpace(req.ProjectDir) == "" && strings.TrimSpace(req.ProjectProfile) == "" {
-				http.Error(w, "project_dir or project_profile required", http.StatusBadRequest)
-				return
+				// BL407 Phase 1's worktree auto-assignment (Decision 2)
+				// covers exactly this case at Run() time: when no
+				// project_dir/project_profile/cluster_profile is given
+				// and autonomous.worktree_base_repo is configured,
+				// Manager.Run() creates a dedicated git worktree and
+				// backfills ProjectDir itself. This check predates that
+				// design (v5.26.19) and never accounted for it, so a
+				// worktree-mode PRD could never be created at all through
+				// this endpoint — found live 2026-10-11 creating BL404's
+				// PRD, the deliberate first real shakedown of worktree
+				// mode. Still reject when cluster_profile is set (that
+				// path needs project_profile for the worker to know what
+				// to clone) or when worktree mode isn't configured: then
+				// there's genuinely no work source.
+				worktreeModeApplies := strings.TrimSpace(req.ClusterProfile) == "" &&
+					s.cfg != nil && strings.TrimSpace(s.cfg.Autonomous.WorktreeBaseRepo) != ""
+				if !worktreeModeApplies {
+					http.Error(w, "project_dir or project_profile required (or configure autonomous.worktree_base_repo for automatic git-worktree isolation)", http.StatusBadRequest)
+					return
+				}
 			}
 			prd, err := s.autonomousMgr.CreatePRD(req.Spec, req.ProjectDir, req.Backend, req.Model, req.Effort)
 			if err != nil {
