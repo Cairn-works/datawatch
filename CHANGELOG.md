@@ -5,6 +5,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## v9.0.24 — fix(autonomous): B116 — config-write propagation clobbered live-only bool defaults
+
+### Fixed
+- `PUT /api/config`'s BL369 propagation (`internal/server/api.go`) used
+  to marshal the *entire* `autonomous.*` config struct and merge it
+  onto the live `autonomous.Manager` config on every `autonomous.*`
+  write, regardless of which key the write actually touched. Four
+  bool fields are deliberately marked "no `omitempty`"
+  (`AutoApproveChildren`, `PerStoryApproval`, `ContinueOnStoryFailure`,
+  `InjectionGuard`/`BlockOnInjection`) so an explicit `false` isn't
+  silently dropped — but that also means they're *always* present in
+  that full-struct marshal. Since the YAML-facing config struct
+  defaults to Go's zero value (`false`) while the live manager's own
+  default for `AutoApproveChildren` is `true` (set once at daemon
+  construction), any unrelated `autonomous.*` write — e.g. setting
+  `worktree_base_repo` — silently clobbered a live-only `true` back to
+  `false`. Found live 2026-10-11 while setting
+  `autonomous.worktree_base_repo` ahead of a PRD run.
+- Fixed by scoping the propagated JSON to only the top-level field(s)
+  the specific `PUT` actually touched (by the dot-path's first segment
+  after `autonomous.`), read from the already-type-converted config
+  struct rather than the raw patch values. A nested key like
+  `autonomous.default_quality_gates.enabled` forwards the whole
+  `default_quality_gates` object (correct — that's the smallest
+  self-contained unit), not a literal dotted key. Every untouched
+  top-level field, no-`omitempty` or not, now passes through
+  `API.SetConfig`'s merge completely untouched.
+- 3 new tests in `internal/server/autonomous_config_propagation_test.go`:
+  only the touched field is forwarded, a nested dot-path key forwards
+  its whole parent object, and no `autonomous.*` key in the patch means
+  no propagation call at all.
+
 ## v9.0.23 — feat(autonomous): BL407 Phase 5 — config/parity surface
 
 ### Added

@@ -187,7 +187,7 @@ type mcpBridgeAPI interface {
 var startTime = time.Now()
 
 // Version is set at build time. The server package uses this for /api/health and /api/info.
-var Version = "9.0.23"
+var Version = "9.0.24"
 
 // Server holds all HTTP handler dependencies
 type Server struct {
@@ -5690,14 +5690,46 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	s.auditConfigPatch(r.Context(), patch, skipped)
 	// BL369 — propagate autonomous.* config changes to the live manager so
 	// injection_guard and other knobs take effect without a daemon restart.
+	// Forward only the top-level JSON field(s) this PUT actually touched
+	// (keyed by the dot-path's first segment after "autonomous."), read
+	// from the already-type-converted s.cfg.Autonomous rather than the
+	// raw patch values (which may still be wire-format strings/CSV for
+	// array fields). This used to marshal the WHOLE s.cfg.Autonomous
+	// struct on every autonomous.* write: API.SetConfig merges onto the
+	// live config (v8.36.9), but a handful of fields are deliberately
+	// "no omitempty" (AutoApproveChildren, PerStoryApproval,
+	// ContinueOnStoryFailure, InjectionGuard, BlockOnInjection) so an
+	// explicit false isn't silently dropped — which means they're ALWAYS
+	// present in a full-struct marshal, so any unrelated autonomous.*
+	// write re-applied s.cfg.Autonomous's current (possibly still
+	// YAML-zero) value and clobbered a live-only true back to false.
+	// Found live 2026-10-11 via autonomous.auto_approve_children.
+	// Scoping the propagated JSON to only the touched top-level field(s)
+	// lets every untouched field, no-omitempty or not, pass through
+	// SetConfig's merge untouched.
+	touchedTop := map[string]struct{}{}
 	for k := range patch {
-		if strings.HasPrefix(k, "autonomous.") {
-			if s.autonomousMgr != nil {
-				if b, err := json.Marshal(s.cfg.Autonomous); err == nil {
+		if rest, ok := strings.CutPrefix(k, "autonomous."); ok {
+			if i := strings.IndexByte(rest, '.'); i >= 0 {
+				rest = rest[:i]
+			}
+			touchedTop[rest] = struct{}{}
+		}
+	}
+	if len(touchedTop) > 0 && s.autonomousMgr != nil {
+		if full, err := json.Marshal(s.cfg.Autonomous); err == nil {
+			var fullMap map[string]json.RawMessage
+			if json.Unmarshal(full, &fullMap) == nil {
+				partial := make(map[string]json.RawMessage, len(touchedTop))
+				for top := range touchedTop {
+					if v, ok := fullMap[top]; ok {
+						partial[top] = v
+					}
+				}
+				if b, err := json.Marshal(partial); err == nil {
 					_ = s.autonomousMgr.SetConfig(json.RawMessage(b))
 				}
 			}
-			break
 		}
 	}
 	// Invalidate backend version cache so next /api/backends reflects changes.
