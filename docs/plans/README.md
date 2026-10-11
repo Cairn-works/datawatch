@@ -40,7 +40,7 @@ single source of truth.
 
 ## Current state — 2026-10-10
 
-Latest release: **v9.0.23** (2026-10-11). feat(autonomous): BL407 Phase 5 — config/parity surface. `PRD.Git.AutoPR`/`BaseBranch` are now operator-settable after PRD creation (new `set_git` REST action, `autonomous_prd_set_git` MCP tool, `prd-set-git` CLI command, and a new Git section on the PWA's PRD Settings modal — Mobile-Parity issue `datawatch-app#249`), and a new daemon-wide `autonomous.default_auto_pr` config starts every future PRD's `Git.AutoPR` pre-set (applied once at creation time, not resolved at use-time, since `AutoPR` is a plain bool with no pointer override — a resolve-at-use-time default couldn't tell "operator explicitly turned it back off" from "never touched"). `WorktreeBaseRepo`/`WorktreeDir`/`RulesFile`/`ContextFile`/`UpstreamRepos` were confirmed already fully config-round-trippable with zero new code. Caught two real gaps live while shipping it: the new MCP tool needed its own `federation.MCPToolCap` entry or it 404s from `POST /api/mcp/call` despite being properly registered, and the new PWA hint text first said "PRD" and left "automaton" untranslated in 4 locale bundles — both caught by this repo's own guard tests before shipping. **Active work:** the v10.0.0 self-build arc — see [§ Roadmap](#roadmap-self-build-arc--v1000-locked-2026-10-10); BL407 (`docs/plans/2026-10-10-prd-git-workflow.md`) closed 2026-10-11 (Phase 6, docs-only closure, no version bump — all 7 phases shipped, latest v9.0.23). Stage 1 of the roadmap is now complete; **Stage 2 — BL404** (imap_mcp parity gaps, the deliberate shakedown run through the new PRD-driven path) is next. Plans folder refactored 2026-10-10: 11 completed plan docs archived to `historical-plans/`, BL381 closed as shipped, and unscheduled work called out in the Roadmap's "Not yet placed" list.
+Latest release: **v9.0.28** (2026-10-11) on `main`; **v9.0.29** open on `datawatch#205` pending operator merge (BL404, the Stage 2 shakedown of the new PRD-driven workflow — see the Roadmap section below for the full B116-B121/BL413 list of what that shakedown found and fixed). Previous: **v9.0.23**. feat(autonomous): BL407 Phase 5 — config/parity surface. `PRD.Git.AutoPR`/`BaseBranch` are now operator-settable after PRD creation (new `set_git` REST action, `autonomous_prd_set_git` MCP tool, `prd-set-git` CLI command, and a new Git section on the PWA's PRD Settings modal — Mobile-Parity issue `datawatch-app#249`), and a new daemon-wide `autonomous.default_auto_pr` config starts every future PRD's `Git.AutoPR` pre-set (applied once at creation time, not resolved at use-time, since `AutoPR` is a plain bool with no pointer override — a resolve-at-use-time default couldn't tell "operator explicitly turned it back off" from "never touched"). `WorktreeBaseRepo`/`WorktreeDir`/`RulesFile`/`ContextFile`/`UpstreamRepos` were confirmed already fully config-round-trippable with zero new code. Caught two real gaps live while shipping it: the new MCP tool needed its own `federation.MCPToolCap` entry or it 404s from `POST /api/mcp/call` despite being properly registered, and the new PWA hint text first said "PRD" and left "automaton" untranslated in 4 locale bundles — both caught by this repo's own guard tests before shipping. **Active work:** the v10.0.0 self-build arc — see [§ Roadmap](#roadmap-self-build-arc--v1000-locked-2026-10-10). Stage 1 (BL406+BL407) and Stage 2 (BL404, the real shakedown of the new PRD-driven workflow) are both done — see the Roadmap section for the full B116-B121/BL413 list the shakedown surfaced and fixed same-day. **Stage 3 — BL403** (Plugin Extension Surfaces, `docs/plans/2026-10-09-plugin-extension-surfaces.md`) is now in progress, run PRD-driven per the roadmap's own design, starting with Phase 1 (Plugin Manifest v3). Plans folder refactored 2026-10-10: 11 completed plan docs archived to `historical-plans/`, BL381 closed as shipped, and unscheduled work called out in the Roadmap's "Not yet placed" list.
 
 Previous: **v9.0.7** (2026-10-09). fix(daemon): `datawatch restart`/`stop`/`start` now detect and delegate to an active/enabled `datawatch.service` systemd --user unit instead of raw PID signaling + self-daemonizing; the daemon now falls back to the dedicated `~/.datawatch/tmux` socket when `TMUX_TMPDIR` is unset at boot; `ResumeMonitors` self-heals a `StateFailed` session back to `StateRunning` at boot when its tmux pane is actually still alive. Full history for every release between this and the v8.39.1 entry below is in `CHANGELOG.md` (this section was 8 days / ~400 versions stale until this backlog refactor — see the "Gotcha" note in AGENT.md's Project Tracking Rule: this header is meant to be refreshed every release, not just major ones).
 
@@ -326,14 +326,41 @@ not a preference). Done — both items shipped.**
    docs closure, 2026-10-11, is docs-only — no version bump).
 
 **Stage 2 — one small, low-risk item, run for real through the new
-PRD-driven path as a deliberate shakedown. Next up — Stage 1 complete.**
+PRD-driven path as a deliberate shakedown. Done — real run complete,
+PR open pending operator merge.**
 3. **BL404** — imap_mcp parity gaps. Smallest, most self-contained real
    item left; whatever BL406/BL407 need tuning on gets found here
    cheaply, per the operator's "real-world testing to validate/tune"
    instruction, before trusting the workflow with something bigger.
+   **Done 2026-10-11**: real PRD, decomposed/approved/run via the new
+   worktree + auto-PR workflow, backend `claude-code`. PR:
+   [`datawatch#205`](https://github.com/dmz006/datawatch/pull/205)
+   (open, awaiting operator merge — not auto-merged, per the plan's
+   own "open for review" design). The shakedown found and fixed real
+   gaps in the new workflow itself, each shipped same-day:
+   **B116** (config-write propagation clobbered live-only bool
+   defaults, v9.0.24), **B117** (PRD creation blocked worktree-mode
+   PRDs with no work-source error, v9.0.25), **B118** (decompose
+   needed worktree auto-creation too, not just `Run()`, plus
+   orphan-worktree cleanup, v9.0.26), **B119**
+   (`autonomous.execution_backend` had zero config surface, v9.0.26),
+   **B120** (an explicit clear-to-zero on a touched `autonomous.*`
+   field never reached the live manager, v9.0.27), **B121**
+   (`autonomous.rules_file`/`context_file` had full config plumbing
+   but zero consumers — BL406's own "decomposer reads it" claim was
+   never implemented despite all 6 phases marked Done, v9.0.28). Also
+   found: the per-task LLM verifier is unreliable in both directions
+   (an `ok:true` task's `issues` list contained 3 factually false
+   complaints, confirmed by reading the real diff) — filed as
+   **BL413** (needs a genuinely new diff-aware rule type, not
+   improvised). A manual audit against AGENT.md's own documentation
+   checklist (closing the gap BL413 will eventually automate) found 3
+   more real misses the task specs never required — CHANGELOG,
+   testing-tracker, version bump — fixed by pushing directly to the
+   same PR branch (v9.0.29), not a new PR.
 
 **Stage 3 — full backlog, PRD-driven, one item at a time, confidence
-established. Not started; blocked on Stage 2.**
+established. In progress — starting with BL403.**
 4. **BL403** — Plugin Extension Surfaces. Before BL405: its Phase 3/4
    widget `Kind` taxonomy is what BL405 Phase 10 consumes.
 5. **BL402** — GH#204 result panel for scheduled jobs/integrations.
@@ -524,8 +551,8 @@ else is in `historical-plans/`):
 |---|---|---|
 | `2026-10-10-configurable-project-rules-enforcement.md` | BL406 (+B111/B112/B113) | Stage 1 #1 — **done**, all 6 phases shipped (v9.0.11–v9.0.17) |
 | `2026-10-10-prd-git-workflow.md` | BL407 (+B114) | Stage 1 #2 — shipped v9.0.23 (Phases 0-6 all done) |
-| _(no plan doc yet)_ | BL404 | Stage 2 #3 |
-| `2026-10-09-plugin-extension-surfaces.md` | BL403 | Stage 3 #4 |
+| _(no plan doc yet — ran directly as a PRD)_ | BL404 | Stage 2 #3 — done, PR `datawatch#205` open pending merge |
+| `2026-10-09-plugin-extension-surfaces.md` | BL403 | Stage 3 #4 — in progress, Phase 1 next |
 | `2026-10-09-gh204-result-panel.md` | BL402 (GH#204) | Stage 3 #5 |
 | `2026-10-10-llm-enhancements.md` | BL405 (absorbs BL390 P2/P3) | Stage 3 #6 |
 | `2026-10-04-f2-session-worker-isolation.md` | BL395 (security track) | Stage 3 #7 |
