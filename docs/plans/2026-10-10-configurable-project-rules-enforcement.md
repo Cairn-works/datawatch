@@ -3,6 +3,19 @@
 - **Date**: 2026-10-10
 - **Version at planning**: v9.0.10
 - **Status**: **Done** — Phase 0 done (v9.0.11), Phase 1 done (v9.0.12, real rule engine), Phase 2 done (v9.0.13, first built-in rule), Phase 3 done (v9.0.14, rules fire automatically), Phase 4 done (v9.0.15, upstream issue-filing), Phase 5 done (v9.0.17, real GuidedMode + scope-drift rule — B111/B112 closed). All 6 phases shipped.
+- **Correction, 2026-10-11** (operator audit of BL404's real run): this
+  Context section's own claim — "the decomposer/task-spec generation
+  and the new scanner both read whichever path is configured" for
+  `rules_file`/`context_file` — was never actually implemented in any
+  of the 6 phases above, despite every phase being marked Done. Full
+  codebase grep found zero consumers of either field beyond the
+  REST/MCP/CLI/comm read-write config plumbing itself. Fixed
+  immediately (decomposer half: new `internal/autonomous/
+  rules_context.go`, wired into `Decompose()`/`DecomposeStreaming()`).
+  The scanner half needs a genuinely new rule type (presence rules
+  only check "does a file exist," not "was it touched in this diff")
+  and is correctly scoped as its own item rather than improvised —
+  filed as **BL413** in `docs/plans/README.md`.
 
 ## Context
 

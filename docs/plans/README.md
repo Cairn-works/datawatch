@@ -174,7 +174,7 @@ Previous: **v8.25.3** (2026-09-12). feat(observer): nvidia-smi and tegrastats GP
 
  | Bucket | Count | Notes |
 |---|---|---|
-| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. B117 (PRD creation rejected the exact empty-project_dir case BL407 Phase 1's worktree auto-assignment is designed for) — fixed v9.0.25. B118 (session-based decompose needs project_dir too, but worktree auto-creation only fired at Run() time; also added orphan-worktree cleanup on Reject/Archive) — fixed v9.0.26. B119 (`autonomous.execution_backend` had zero config surface despite existing as a live field) — fixed v9.0.26. B120 (an explicit clear-to-zero on a touched `autonomous.*` field, e.g. `planning_model: ""`, was itself omitted from B116's own scoped propagation, found live immediately after v9.0.26 shipped) — fixed v9.0.27. None open |
+| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. B117 (PRD creation rejected the exact empty-project_dir case BL407 Phase 1's worktree auto-assignment is designed for) — fixed v9.0.25. B118 (session-based decompose needs project_dir too, but worktree auto-creation only fired at Run() time; also added orphan-worktree cleanup on Reject/Archive) — fixed v9.0.26. B119 (`autonomous.execution_backend` had zero config surface despite existing as a live field) — fixed v9.0.26. B120 (an explicit clear-to-zero on a touched `autonomous.*` field, e.g. `planning_model: ""`, was itself omitted from B116's own scoped propagation, found live immediately after v9.0.26 shipped) — fixed v9.0.27. B121 (`autonomous.rules_file`/`context_file` had full config plumbing but zero consumers — BL406's own "decomposer reads it" claim was never implemented despite all 6 phases marked Done) — fixed v9.0.28 (decomposer half; scanner half filed as BL413). None open |
 | Open features | 7 | BL241 Matrix (design interview needed); BL365 + BL408 + BL395 security remediation track (roadmap Stage 3 #7); BL390 Phase 2/3 (folded into BL405 Phase 8a); BL393 nested tags (excluded until authorized); BL394 + BL392 (substantially done, residue cross-repo). BL389 shipped v9.0.0; BL381 shipped v8.28.0/v8.28.2 |
 | Active backlog | 0 | BL387 complete (v8.31–33.0 ✅) |
 | Pending backlog | 5 | BL402, BL403, BL404, BL405 (v10.0.0 roadmap; BL406 shipped v9.0.17, BL407 shipped v9.0.23) + BL398 Phase 2; BL400 deferred (open questions). BL335 shipped v8.62.x via BL397 Phase 4 |
@@ -434,6 +434,42 @@ established. Not started; blocked on Stage 2.**
    doc yet; needs a design pass (inventory every mutation-capable
    surface, pick one consistent gating mechanism, decide the default)
    before queueing a position in the roadmap.
+12. **BL413** — Diff-Aware Project-Rules (structured Phase-Completion-
+   Checklist enforcement for autonomous PRD runs) (filed 2026-10-11,
+   operator challenge: "we agreed nothing ships without passing all
+   rule checklists — is that actually enforced for autonomous runs?").
+   Audited live against BL404's real run: no mechanism generates or
+   gates a PRD on AGENT.md's "Phase Completion Checklist"/"General
+   documentation checklist" (CHANGELOG, `docs/testing-tracker.md`,
+   Mobile-Parity, version bump, etc.). The project-rules engine
+   (`internal/autonomous/scan`) already has 3 fully generic rule types
+   (`content`/`consistency`/`presence`) that work against any file
+   path with zero new code — confirmed live by configuring a real
+   `version-sync` consistency rule (`cmd/datawatch/main.go` vs.
+   `internal/server/api.go`) and independently proving it both passes
+   clean against this repo and catches a deliberate mismatch, no PRD
+   involved. But `presence` only checks "does a file matching this
+   glob exist anywhere," never "was it touched in *this* diff" — so it
+   can't express "if any `.go` file changed, `CHANGELOG.md` must also
+   be in `files_touched`," which is what most of AGENT.md's checklist
+   items actually need. Needs a new diff-aware rule type (or a
+   `files_touched`-conditioned variant of `presence`) consulting the
+   same `pre_task_sha`/`files_touched` data the executor already
+   tracks per task. No plan doc yet — needs a design pass (what the
+   new rule type's pattern/config shape is, which checklist items are
+   safely automatable vs. need operator judgment e.g. "docs-only skips
+   version bump"). Related, not duplicate: **BL406**'s own plan
+   claimed ("the decomposer/task-spec generation and the new scanner
+   both read whichever rules/context path is configured") was found
+   live to have never been implemented despite all 6 phases marked
+   Done — `autonomous.rules_file`/`context_file` had full config
+   read/write plumbing but zero consumers anywhere in the codebase.
+   Fixed immediately (2026-10-11, same session, not deferred): new
+   `internal/autonomous/rules_context.go` injects the resolved
+   rules/context file content into the decompose prompt for both
+   `Decompose()`/`DecomposeStreaming()`. BL413 is the *scanner* half
+   of that same original promise — a genuinely new rule-type design,
+   correctly deferred rather than improvised.
 
 **Outside the queue, handled separately, not blocking Stage 3:**
 - ~~**BL381**~~ — status-verified 2026-10-10: shipped v8.28.0 + v8.28.2
@@ -888,6 +924,26 @@ _2026-05-02 operator-filed items promoted directly to BL218–BL221. 2026-05-03 
 > marshal. 1 new test in
 > `internal/server/autonomous_config_propagation_test.go`. No longer
 > open.
+
+> **B121** — `autonomous.rules_file`/`context_file` (BL406) had full
+> REST/MCP/CLI/comm read-write config plumbing but zero consumers
+> anywhere in the codebase — confirmed via a full-repo grep. BL406's
+> own Context section explicitly promised "the decomposer/task-spec
+> generation and the new scanner both read whichever path is
+> configured," and every one of that plan's 6 phases was marked Done,
+> but the actual consumption was never built. Found live 2026-10-11
+> auditing BL404's real run after an operator challenge ("is AGENT.md/
+> DATAWATCH-CONTEXT.md actually enforced for autonomous PRDs?").
+> **Fixed v9.0.28** (decomposer half): new
+> `internal/autonomous/rules_context.go` resolves `RulesFile` (default
+> `AGENT.md`, always applied) and `ContextFile` (default `CONTEXT.md`,
+> only when present) relative to each PRD's own `project_dir` and
+> injects their content into the planning prompt for both
+> `Decompose()`/`DecomposeStreaming()`, capped per-file so an unusually
+> large rules file can't blow the context budget. 6 new tests in new
+> `internal/autonomous/rules_context_test.go`. The scanner half (BL406's
+> other promised consumer) needs a genuinely new rule type — filed as
+> **BL413**, not improvised. No longer open.
 
 _(Otherwise no open bugs as of the 2026-10-09/10 backlog refactor —
 everything previously listed here was already closed and has been moved

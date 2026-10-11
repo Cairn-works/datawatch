@@ -5,6 +5,42 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## v9.0.28 — fix(autonomous): B121 — rules_file/context_file had full config plumbing, zero consumers
+
+### Fixed
+- `autonomous.rules_file`/`context_file` (BL406) had full REST/MCP/
+  CLI/comm read-write config plumbing but zero consumers anywhere in
+  the codebase. BL406's own plan explicitly promised "the decomposer/
+  task-spec generation and the new scanner both read whichever path
+  is configured," and every one of that plan's 6 phases was marked
+  Done, but the actual consumption was never built — confirmed via a
+  full-repo grep. Found live auditing BL404's real completed run
+  after an operator challenge about whether AGENT.md/
+  DATAWATCH-CONTEXT.md rules are actually enforced for autonomous PRD
+  runs.
+- Fixed the decomposer half: new `internal/autonomous/rules_context.go`
+  resolves `RulesFile` (default `AGENT.md`, always applied once a
+  project_dir exists) and `ContextFile` (default `CONTEXT.md`, only
+  when present — not everyone has one) relative to each PRD's own
+  `project_dir`, and injects their content into the planning prompt
+  for both `Decompose()`/`DecomposeStreaming()`. Capped at 256KB per
+  file so an unusually large rules file can't blow out the LLM's
+  context budget (this repo's own ~115KB `AGENT.md` and ~44KB
+  `DATAWATCH-CONTEXT.md` both fit whole).
+- The scanner half of BL406's original promise needs a genuinely new
+  rule type — the existing `presence` rule only checks "does a file
+  matching this glob exist," never "was it touched in this diff,"
+  which is what a real documentation-checklist check needs. Filed as
+  **BL413** rather than improvised.
+- Independently demonstrated the *existing* project-rules engine
+  already supports real structured checks with zero new code:
+  configured a `version-sync` consistency rule (`cmd/datawatch/main.go`
+  vs. `internal/server/api.go` `Version` strings) on this daemon via
+  the existing `PUT /api/autonomous/scan/config` endpoint, and proved
+  — via a standalone scan run, no PRD involved — that it both passes
+  clean against this repo and catches a deliberate mismatch.
+- 6 new tests in new `internal/autonomous/rules_context_test.go`.
+
 ## v9.0.27 — fix(server): B120 — explicit clear-to-zero on an autonomous.* field never reached the live manager
 
 ### Fixed

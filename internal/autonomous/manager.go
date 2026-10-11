@@ -899,6 +899,9 @@ func (m *Manager) Decompose(prdID string) (*PRD, error) {
 			prompt = fmt.Sprintf(PlanningPrompt, prd.Spec+"\n\n"+priorCtx)
 		}
 	}
+	// BL406 — see rules_context.go. Found live 2026-10-11: this was
+	// promised by the plan's own Context section and never implemented.
+	prompt += m.rulesContextSuffix(prd)
 
 	planModel := prd.DecompositionModel
 	if planModel == "" {
@@ -1012,6 +1015,8 @@ func (m *Manager) decomposeStreamingCore(prdID string, cb StoryCallback) (*PRD, 
 			prompt = fmt.Sprintf(PlanningPrompt, prd.Spec+"\n\n"+priorCtx)
 		}
 	}
+	// BL406 — see rules_context.go and Decompose()'s identical call.
+	prompt += m.rulesContextSuffix(prd)
 
 	// Operator-reported: a PRD configured for claude-code kept running
 	// decompose against the daemon's global qwen default instead. Root
