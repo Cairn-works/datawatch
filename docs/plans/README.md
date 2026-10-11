@@ -174,7 +174,7 @@ Previous: **v8.25.3** (2026-09-12). feat(observer): nvidia-smi and tegrastats GP
 
  | Bucket | Count | Notes |
 |---|---|---|
-| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. B117 (PRD creation rejected the exact empty-project_dir case BL407 Phase 1's worktree auto-assignment is designed for) — fixed v9.0.25. B118 (session-based decompose needs project_dir too, but worktree auto-creation only fired at Run() time; also added orphan-worktree cleanup on Reject/Archive) — fixed v9.0.26. B119 (`autonomous.execution_backend` had zero config surface despite existing as a live field) — fixed v9.0.26. B120 (an explicit clear-to-zero on a touched `autonomous.*` field, e.g. `planning_model: ""`, was itself omitted from B116's own scoped propagation, found live immediately after v9.0.26 shipped) — fixed v9.0.27. B121 (`autonomous.rules_file`/`context_file` had full config plumbing but zero consumers — BL406's own "decomposer reads it" claim was never implemented despite all 6 phases marked Done) — fixed v9.0.28 (decomposer half; scanner half filed as BL413). None open |
+| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. B117 (PRD creation rejected the exact empty-project_dir case BL407 Phase 1's worktree auto-assignment is designed for) — fixed v9.0.25. B118 (session-based decompose needs project_dir too, but worktree auto-creation only fired at Run() time; also added orphan-worktree cleanup on Reject/Archive) — fixed v9.0.26. B119 (`autonomous.execution_backend` had zero config surface despite existing as a live field) — fixed v9.0.26. B120 (an explicit clear-to-zero on a touched `autonomous.*` field, e.g. `planning_model: ""`, was itself omitted from B116's own scoped propagation, found live immediately after v9.0.26 shipped) — fixed v9.0.27. B121 (`autonomous.rules_file`/`context_file` had full config plumbing but zero consumers — BL406's own "decomposer reads it" claim was never implemented despite all 6 phases marked Done) — fixed v9.0.28 (decomposer half; scanner half filed as BL413). B122 (B121's own large-prompt injection exposed a tmux send-keys timing race — a ~160KB/20-chunk payload corrupted the receiving TUI's input rendering and the trailing Enter never registered) — fixed v9.0.29. None open |
 | Open features | 7 | BL241 Matrix (design interview needed); BL365 + BL408 + BL395 security remediation track (roadmap Stage 3 #7); BL390 Phase 2/3 (folded into BL405 Phase 8a); BL393 nested tags (excluded until authorized); BL394 + BL392 (substantially done, residue cross-repo). BL389 shipped v9.0.0; BL381 shipped v8.28.0/v8.28.2 |
 | Active backlog | 0 | BL387 complete (v8.31–33.0 ✅) |
 | Pending backlog | 5 | BL402, BL403, BL404, BL405 (v10.0.0 roadmap; BL406 shipped v9.0.17, BL407 shipped v9.0.23) + BL398 Phase 2; BL400 deferred (open questions). BL335 shipped v8.62.x via BL397 Phase 4 |
@@ -1005,6 +1005,25 @@ _2026-05-02 operator-filed items promoted directly to BL218–BL221. 2026-05-03 
 > `internal/autonomous/rules_context_test.go`. The scanner half (BL406's
 > other promised consumer) needs a genuinely new rule type — filed as
 > **BL413**, not improvised. No longer open.
+
+> **B122** — B121's own large-prompt injection (full `AGENT.md`/
+> `DATAWATCH-CONTEXT.md` content into every decompose call, ~160KB)
+> exposed a pre-existing timing race in `internal/session/tmux.go`'s
+> `SendKeysWithSettle`: a flat 10ms inter-chunk delay and flat 120ms
+> trailing settle before `Enter`, never exercised beyond one chunk
+> before today since every prior decompose prompt was a few KB. Found
+> live kicking off BL403 Phase 1 as a real PRD: the receiving TUI
+> (claude-code) corrupted its own input rendering across ~20 back-to-
+> back chunk writes (observed: ~13 unexpanded `[Pasted text #N]`
+> placeholders stuck on the input line) and the trailing `Enter` never
+> registered as "submit" — the session sat forever instead of
+> running. This chunking path had zero prior test coverage. **Fixed
+> v9.0.29**: `interChunkDelay` 10ms → 30ms, and a new
+> `settleForChunks` helper scales the trailing settle with chunk count
+> (capped at 2s). A single-chunk payload — the overwhelming common
+> case before today — is completely unaffected. 7 new tests in new
+> `internal/session/tmux_large_payload_test.go`, including an exact
+> reproduction of the real failure's scale. No longer open.
 
 _(Otherwise no open bugs as of the 2026-10-09/10 backlog refactor —
 everything previously listed here was already closed and has been moved
