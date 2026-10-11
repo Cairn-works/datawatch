@@ -157,21 +157,15 @@ func (m *Manager) Run(ctx context.Context, prdID string, spawn SpawnFn, verify V
 	// below, so a later resume naturally skips this without a
 	// separate "already did this" flag. Must run before
 	// EnsureIgnoredPatterns/cross-seed below, both of which read
-	// prd.ProjectDir.
-	if prd.ProjectDir == "" && prd.ProjectProfile == "" && prd.ClusterProfile == "" {
-		m.mu.Lock()
-		baseRepo := m.cfg.WorktreeBaseRepo
-		worktreeDir := m.cfg.WorktreeDir
-		m.mu.Unlock()
-		if baseRepo != "" {
-			path, branch, werr := EnsureWorktree(prd, baseRepo, worktreeDir)
-			if werr != nil {
-				return fmt.Errorf("prd %q worktree setup: %w", prdID, werr)
-			}
-			prd.ProjectDir = path
-			prd.Git.Branch = branch
-			log.Printf("[autonomous] prd=%s worktree created at %s (branch=%s)", prdID, path, branch)
-		}
+	// prd.ProjectDir. Shared with Decompose()/DecomposeStreaming()
+	// (found live 2026-10-11: decompose needs a real project_dir too,
+	// for session-based planning backends — this used to be the only
+	// place a worktree got created, so decompose could never succeed
+	// for a worktree-mode PRD at all).
+	if created, werr := m.ensureWorktreeIfConfigured(prd); werr != nil {
+		return fmt.Errorf("prd %q worktree setup: %w", prdID, werr)
+	} else if created {
+		log.Printf("[autonomous] prd=%s worktree created at %s (branch=%s)", prdID, prd.ProjectDir, prd.Git.Branch)
 	}
 	// BL407 Phase 4 — cluster-dispatched counterpart to the worktree
 	// branch above. No local worktree to create here (the worker's

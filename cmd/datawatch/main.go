@@ -113,7 +113,7 @@ import (
 )
 
 // Version is set at build time via -ldflags.
-var Version = "9.0.25"
+var Version = "9.0.26"
 
 // writeMigrationStatus persists the v7-migration result to a JSON
 // file the PWA reads via /api/migration/status to surface a one-time
@@ -4066,6 +4066,7 @@ func runStart(cmd *cobra.Command, _ []string) error {
 			MaxParallelTasks:           acfgIn.MaxParallelTasks,
 			PlanningBackend:            acfgIn.PlanningBackend,
 			VerificationBackend:        acfgIn.VerificationBackend,
+			ExecutionBackend:           acfgIn.ExecutionBackend,
 			PlanningModel:              acfgIn.PlanningModel,
 			VerificationModel:          acfgIn.VerificationModel,
 			VerificationBackends:       append([]string(nil), acfgIn.VerificationBackends...),

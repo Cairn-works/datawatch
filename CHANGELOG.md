@@ -5,6 +5,58 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## v9.0.26 — fix(autonomous): B118/B119 — worktree-at-decompose + orphan cleanup, execution_backend config surface
+
+### Fixed
+- **B118** — session-based decompose (any coding-agent planning
+  backend: opencode, claude-code, goose, aider) needs a real
+  `project_dir` to root the planning session in, exactly like `Run()`
+  does — but worktree auto-creation (BL407 Phase 1) only ever fired
+  at `Run()` time, which happens *after* decompose. A worktree-mode
+  PRD could therefore never successfully decompose at all. Found live
+  2026-10-11 creating BL404's own PRD, the deliberate first real
+  shakedown of worktree mode. Fixed by extracting the shared gating
+  logic into `ensureWorktreeIfConfigured` and calling it from
+  `Decompose()`/`DecomposeStreaming()` too, not just `Run()` (also
+  closes a drifted-duplicate risk between the two decompose entry
+  points, already flagged as a prior bug source in their own code
+  comments).
+- **B118 also adds** orphan-worktree cleanup: a worktree created at
+  decompose time for a PRD that's then rejected (before ever running)
+  or archived (the universal "done with this forever" backstop,
+  covering a cancelled/blocked/failed PRD's worktree once the
+  operator is finished inspecting it) previously had no cleanup path
+  at all — only a *successfully completed* PRD's worktree was ever
+  removed. New `cleanupOrphanedWorktree`, called from `Reject()` and
+  `Archive()`. Deliberately non-forced (unlike the post-push removal):
+  a worktree with any uncommitted content is left in place for
+  inspection rather than silently destroyed.
+- **B119** — `autonomous.execution_backend` (the daemon-wide fallback
+  backend for a task/PRD with no explicit `Backend`, BL203) existed
+  as a live `internal/autonomous.Config` field with **zero** config
+  surface anywhere — not YAML, not `PUT /api/config`, not the
+  daemon-startup bridge. Found live in the same session while making
+  Claude the default backend for real PRD-driven development work.
+  Wired the standard 3 layers (YAML mirror in
+  `config.AutonomousConfig`, `applyConfigPatch` case + `GET
+  /api/config` read-side, daemon-startup bridge in
+  `cmd/datawatch/main.go`) — same minimal pattern as every other
+  `autonomous.*` field added this cycle. MCP/CLI/PWA-specific surface
+  (beyond what the shared `PUT /api/config` path already covers for
+  CLI/comm) is intentionally not done in this pass.
+- 6 new tests in new `internal/autonomous/worktree_decompose_test.go`
+  (decompose creates a worktree, `DecomposeStreaming` too, `Run()`
+  reuses the same worktree decompose created rather than making a
+  second one, `Reject` cleans up a clean worktree, `Reject` leaves one
+  with uncommitted content alone, `Archive` is the universal backstop
+  for a cancelled PRD's worktree); 1 new test in
+  `internal/server/autonomous_config_patch_test.go` for
+  `execution_backend`'s round-trip.
+- Set `autonomous.planning_backend` and `autonomous.execution_backend`
+  to `claude-code` on this deployment — operator preference for
+  PRD-driven development work going forward (future work will
+  experiment with other models/backends via the same knobs).
+
 ## v9.0.25 — fix(autonomous): B117 — PRD creation blocked worktree-mode PRDs with no work-source error
 
 ### Fixed

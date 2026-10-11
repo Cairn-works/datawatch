@@ -174,7 +174,7 @@ Previous: **v8.25.3** (2026-09-12). feat(observer): nvidia-smi and tegrastats GP
 
  | Bucket | Count | Notes |
 |---|---|---|
-| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. B117 (PRD creation rejected the exact empty-project_dir case BL407 Phase 1's worktree auto-assignment is designed for) — fixed v9.0.25. None open |
+| Open bugs | 0 | B111/B112 — fixed by BL406 Phase 5, v9.0.17. B113 — fixed by BL406 Phase 0. B114 (`PRD.ClusterProfile` dispatch never resolves) — fixed by BL407 Phase 0, v9.0.18. B115 (zero e2e cookbook coverage added since the v9.0.0 tag) — fixed by backfilling TS-787-TS-795, 2026-10-10. B116 (`PUT /api/config`'s autonomous.* propagation clobbered live-only no-omitempty bool defaults, e.g. `auto_approve_children` true→false on an unrelated write) — fixed v9.0.24. B117 (PRD creation rejected the exact empty-project_dir case BL407 Phase 1's worktree auto-assignment is designed for) — fixed v9.0.25. B118 (session-based decompose needs project_dir too, but worktree auto-creation only fired at Run() time; also added orphan-worktree cleanup on Reject/Archive) — fixed v9.0.26. B119 (`autonomous.execution_backend` had zero config surface despite existing as a live field) — fixed v9.0.26. None open |
 | Open features | 7 | BL241 Matrix (design interview needed); BL365 + BL408 + BL395 security remediation track (roadmap Stage 3 #7); BL390 Phase 2/3 (folded into BL405 Phase 8a); BL393 nested tags (excluded until authorized); BL394 + BL392 (substantially done, residue cross-repo). BL389 shipped v9.0.0; BL381 shipped v8.28.0/v8.28.2 |
 | Active backlog | 0 | BL387 complete (v8.31–33.0 ✅) |
 | Pending backlog | 5 | BL402, BL403, BL404, BL405 (v10.0.0 roadmap; BL406 shipped v9.0.17, BL407 shipped v9.0.23) + BL398 Phase 2; BL400 deferred (open questions). BL335 shipped v8.62.x via BL397 Phase 4 |
@@ -828,6 +828,48 @@ _2026-05-02 operator-filed items promoted directly to BL218–BL221. 2026-05-03 
 > case (no worktree config, or `cluster_profile` alone) is unchanged. 4 new
 > tests in `internal/server/autonomous_prd_create_worktree_test.go`. No
 > longer open.
+
+> **B118** — session-based decompose (any coding-agent planning
+> backend — opencode, claude-code, goose, aider) needs a real
+> `project_dir` to root the planning session in, exactly like `Run()`
+> does — but BL407 Phase 1's worktree auto-creation only ever fired at
+> `Run()` time, which happens *after* decompose in the PRD lifecycle. A
+> worktree-mode PRD could therefore never successfully decompose at
+> all. Found live 2026-10-11 creating BL404's own PRD, the deliberate
+> first real shakedown of worktree mode. **Fixed v9.0.26**: extracted
+> the shared gating logic into `ensureWorktreeIfConfigured`
+> (`internal/autonomous/worktree.go`) and called it from
+> `Decompose()`/`DecomposeStreaming()` too, not just `Run()` — also
+> closes a drifted-duplicate risk between the two decompose entry
+> points already flagged as a prior bug source in their own code
+> comments. Also added orphan-worktree cleanup, found missing in the
+> same investigation: a worktree created at decompose time for a PRD
+> that's then rejected (before ever running) or archived (the
+> universal "done with this forever" backstop, covering a
+> cancelled/blocked/failed PRD's worktree once the operator is done
+> inspecting it) previously had no cleanup path at all — only a
+> *successfully completed* PRD's worktree was ever removed. New
+> `cleanupOrphanedWorktree` (`internal/autonomous/git_completion.go`),
+> called from `Reject()` and `Archive()`, deliberately non-forced (a
+> worktree with any uncommitted content is left in place for
+> inspection, same spirit as Decision 5). 6 new tests in new
+> `internal/autonomous/worktree_decompose_test.go`. No longer open.
+
+> **B119** — `autonomous.execution_backend` (the daemon-wide fallback
+> backend for a task/PRD with no explicit `Backend`, BL203) existed as
+> a live `internal/autonomous.Config` field with zero config surface
+> anywhere — not YAML, not `PUT /api/config`, not the daemon-startup
+> bridge. Found live 2026-10-11 while making Claude the default backend
+> for real PRD-driven development work. **Fixed v9.0.26**: wired the
+> standard 3 layers (YAML mirror in `config.AutonomousConfig`,
+> `applyConfigPatch` case + `GET /api/config` read-side, daemon-startup
+> bridge in `cmd/datawatch/main.go`) — same minimal pattern as every
+> other `autonomous.*` field added this cycle. 1 new test in
+> `internal/server/autonomous_config_patch_test.go`. MCP/CLI/PWA-specific
+> surface beyond the shared `PUT /api/config` path (which already
+> covers CLI/comm for free) intentionally not done in this pass —
+> worth its own accessibility-sweep item later, same shape as BL404
+> itself. No longer open.
 
 _(Otherwise no open bugs as of the 2026-10-09/10 backlog refactor —
 everything previously listed here was already closed and has been moved

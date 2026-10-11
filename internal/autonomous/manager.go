@@ -862,6 +862,16 @@ func (m *Manager) Decompose(prdID string) (*PRD, error) {
 	if prd.IsTemplate {
 		return nil, fmt.Errorf("prd %q is a template; instantiate it first", prdID)
 	}
+	// BL407 Phase 1 extension (found live 2026-10-11 creating BL404's
+	// own PRD): session-based decompose needs a real project_dir, same
+	// as Run() does, so a worktree-mode PRD gets one here too — not
+	// just at Run() time, which decompose happens well before. See
+	// ensureWorktreeIfConfigured's own doc comment.
+	if created, werr := m.ensureWorktreeIfConfigured(prd); werr != nil {
+		return nil, fmt.Errorf("prd %q worktree setup: %w", prdID, werr)
+	} else if created {
+		log.Printf("[autonomous] prd=%s worktree created at %s (branch=%s) for decompose", prdID, prd.ProjectDir, prd.Git.Branch)
+	}
 	// v8.20.0 — use the per-PRD planning backend (decomposition_profile) when
 	// set; otherwise fall back to the global planning_backend config. The
 	// execution backend (Backend) is reserved for task sessions only.
@@ -874,6 +884,7 @@ func (m *Manager) Decompose(prdID string) (*PRD, error) {
 		effort = Effort(m.cfg.PlanningEffort)
 	}
 	// Mark in-flight so the operator can see it from /api/autonomous/prds/{id}.
+	// Also persists the worktree assignment above in the same write.
 	prd.Status = PRDPlanning
 	prd.UpdatedAt = time.Now()
 	_ = m.store.SavePRD(prd)
@@ -968,6 +979,16 @@ func (m *Manager) decomposeStreamingCore(prdID string, cb StoryCallback) (*PRD, 
 	if prd.IsTemplate {
 		return nil, fmt.Errorf("prd %q is a template; instantiate it first", prdID)
 	}
+	// BL407 Phase 1 extension — see Decompose()'s identical call for
+	// the full explanation. decomposeStreamingCore is a drifted
+	// duplicate of Decompose() by design history (see this function's
+	// own "operator-reported" comment below); kept in sync here too
+	// rather than risk a third hand-copied gate.
+	if created, werr := m.ensureWorktreeIfConfigured(prd); werr != nil {
+		return nil, fmt.Errorf("prd %q worktree setup: %w", prdID, werr)
+	} else if created {
+		log.Printf("[autonomous] prd=%s worktree created at %s (branch=%s) for decompose", prdID, prd.ProjectDir, prd.Git.Branch)
+	}
 	backend := prd.DecompositionProfile
 	if backend == "" {
 		backend = m.cfg.PlanningBackend
@@ -976,7 +997,7 @@ func (m *Manager) decomposeStreamingCore(prdID string, cb StoryCallback) (*PRD, 
 	if effort == "" {
 		effort = Effort(m.cfg.PlanningEffort)
 	}
-	// Mark in-flight.
+	// Mark in-flight. Also persists the worktree assignment above.
 	prd.Status = PRDPlanning
 	prd.UpdatedAt = time.Now()
 	_ = m.store.SavePRD(prd)
@@ -1122,6 +1143,12 @@ func (m *Manager) Reject(prdID, actor, reason string) (*PRD, error) {
 	if err := m.store.SavePRD(prd); err != nil {
 		return nil, err
 	}
+	// A rejected PRD never ran (or, if it was running, the operator
+	// has still declared it dead) — clean up any decompose-time
+	// worktree now rather than leave it orphaned until someone
+	// eventually archives this PRD. Non-fatal and best-effort; see
+	// cleanupOrphanedWorktree's own doc comment for why it's safe.
+	m.cleanupOrphanedWorktree(prd)
 	updated, _ := m.store.GetPRD(prdID)
 	return updated, nil
 }
@@ -1206,6 +1233,13 @@ func (m *Manager) Archive(id string) (*PRD, error) {
 	if err := m.store.SavePRD(prd); err != nil {
 		return nil, err
 	}
+	// Universal orphan-cleanup backstop: by the time a PRD reaches
+	// Archive, the operator has said "done with this forever" —
+	// whatever Decision 5's "keep for inspection" grace period on a
+	// cancelled/failed/blocked PRD was for has ended. A no-op for a
+	// completed PRD (Phase 2 already removed its worktree on success)
+	// or one that never had a worktree.
+	m.cleanupOrphanedWorktree(prd)
 	updated, _ := m.store.GetPRD(id)
 	return updated, nil
 }

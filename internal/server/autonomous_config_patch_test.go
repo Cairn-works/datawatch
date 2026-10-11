@@ -96,6 +96,20 @@ func TestApplyConfigPatch_BL407WorktreeFields(t *testing.T) {
 	}
 }
 
+// B119 — found live 2026-10-11: autonomous.execution_backend existed as
+// a live internal/autonomous.Config field (BL203, the fallback backend
+// for a task/PRD with no explicit Backend) but had zero config surface
+// anywhere — not YAML, not PUT /api/config, not the daemon-startup
+// bridge. Verify the applyConfigPatch half of the fix here, same
+// precedent as every other single-field case in this function.
+func TestApplyConfigPatch_ExecutionBackend(t *testing.T) {
+	cfg := &config.Config{}
+	applyConfigPatch(cfg, map[string]interface{}{"autonomous.execution_backend": "claude-code"})
+	if cfg.Autonomous.ExecutionBackend != "claude-code" {
+		t.Fatalf("execution_backend: got %q, want claude-code", cfg.Autonomous.ExecutionBackend)
+	}
+}
+
 func TestSplitCSV(t *testing.T) {
 	cases := []struct {
 		in   string

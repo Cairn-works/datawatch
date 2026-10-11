@@ -187,7 +187,7 @@ type mcpBridgeAPI interface {
 var startTime = time.Now()
 
 // Version is set at build time. The server package uses this for /api/health and /api/info.
-var Version = "9.0.25"
+var Version = "9.0.26"
 
 // Server holds all HTTP handler dependencies
 type Server struct {
@@ -5462,6 +5462,7 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
 			"decomposition_backend": s.cfg.Autonomous.PlanningBackend,
 			"verification_backend":  s.cfg.Autonomous.VerificationBackend,
 			"verification_backends": s.cfg.Autonomous.VerificationBackends,
+			"execution_backend":     s.cfg.Autonomous.ExecutionBackend,
 			// BL304: new key + legacy alias.
 			"planning_effort":               s.cfg.Autonomous.PlanningEffort,
 			"decomposition_effort":          s.cfg.Autonomous.PlanningEffort,
@@ -6670,6 +6671,11 @@ func applyConfigPatch(cfg *config.Config, patch map[string]interface{}) []string
 			cfg.Autonomous.PlanningBackend = toString(v)
 		case "autonomous.verification_backend":
 			cfg.Autonomous.VerificationBackend = toString(v)
+		// Found live 2026-10-11 with zero config surface at all (not
+		// YAML, not here, not the daemon-startup bridge) despite
+		// existing as a live field since BL203.
+		case "autonomous.execution_backend":
+			cfg.Autonomous.ExecutionBackend = toString(v)
 		case "autonomous.verification_backends":
 			if arr, ok := toStringArray(v); ok {
 				cfg.Autonomous.VerificationBackends = arr

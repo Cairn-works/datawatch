@@ -108,6 +108,42 @@ func EnsureWorktree(prd *PRD, baseRepo, worktreeDir string) (path, branch string
 	return path, branch, nil
 }
 
+// ensureWorktreeIfConfigured is the shared gate Run() (BL407 Phase 1)
+// and Decompose()/DecomposeStreaming() (this fix, found live
+// 2026-10-11 while creating BL404's own PRD) all call: when a PRD has
+// no explicit ProjectDir/ProjectProfile/ClusterProfile and the
+// operator has configured WorktreeBaseRepo, create (or, on a later
+// call for the same PRD, reuse — EnsureWorktree is idempotent) an
+// isolated git worktree and point the PRD at it. No-op otherwise
+// (worktree mode not configured, or an explicit work-source already
+// set). Extracted to one place specifically to avoid a third
+// hand-copied duplicate of this gating logic — Decompose() and
+// DecomposeStreaming() are already a documented drifted-duplicate
+// pair (see decomposeStreamingCore's own "operator-reported" comment)
+// and Run() had its own third copy before this fix. created reports
+// whether a worktree was actually created or reused this call, so
+// callers can decide whether/how to log it (Run() and Decompose()
+// want different log phrasing).
+func (m *Manager) ensureWorktreeIfConfigured(prd *PRD) (created bool, err error) {
+	if prd.ProjectDir != "" || prd.ProjectProfile != "" || prd.ClusterProfile != "" {
+		return false, nil
+	}
+	m.mu.Lock()
+	baseRepo := m.cfg.WorktreeBaseRepo
+	worktreeDir := m.cfg.WorktreeDir
+	m.mu.Unlock()
+	if baseRepo == "" {
+		return false, nil
+	}
+	path, branch, werr := EnsureWorktree(prd, baseRepo, worktreeDir)
+	if werr != nil {
+		return false, fmt.Errorf("worktree setup: %w", werr)
+	}
+	prd.ProjectDir = path
+	prd.Git.Branch = branch
+	return true, nil
+}
+
 func runGitIn(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...) // #nosec G204 -- fixed git subcommands; dir/branch/path come from operator-controlled config and PRD fields, same trust model as every other git shell-out in this codebase (e.g. session.ProjectGit)
 	cmd.Dir = dir

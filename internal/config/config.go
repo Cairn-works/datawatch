@@ -1873,6 +1873,12 @@ type AutonomousConfig struct {
 	// inherit. For cross-backend independence, set this to a distinct
 	// backend (e.g. ollama when planning is claude-code).
 	VerificationBackend string `yaml:"verification_backend,omitempty" json:"verification_backend,omitempty"`
+	// ExecutionBackend (found live 2026-10-11 with zero config surface
+	// at all despite existing as a live internal/autonomous.Config
+	// field since BL203) is the fallback backend used when a task and
+	// its parent PRD both have an empty Backend field. Empty = fall
+	// through to the global session.llm_backend default.
+	ExecutionBackend string `yaml:"execution_backend,omitempty" json:"execution_backend,omitempty"`
 	// PlanningEffort is the BL41 effort hint for the LLM call.
 	// BL304: renamed from DecompositionEffort; old key still accepted on read.
 	PlanningEffort string `yaml:"planning_effort,omitempty" json:"planning_effort,omitempty"`

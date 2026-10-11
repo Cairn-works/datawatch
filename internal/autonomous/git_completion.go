@@ -171,6 +171,36 @@ func (m *Manager) openCompletionPR(prd *PRD, url, bodyNote string) (string, erro
 	return prURL, nil
 }
 
+// cleanupOrphanedWorktree is the orphan-prevention backstop for a
+// worktree created at Decompose() time (this phase's own fix) for a
+// PRD that then never successfully completes — handleWorktreeCompletion
+// above only removes a worktree after a successful push+PR, so a PRD
+// that's rejected before ever running, or cancelled/archived at any
+// point, previously left its worktree (and branch) sitting around
+// forever with nothing to notice or sweep it. Called from Reject()
+// and Archive() (manager.go) — found live 2026-10-11, same session
+// that added decompose-time worktree creation in the first place.
+//
+// Deliberately NOT forced (unlike handleWorktreeCompletion's
+// post-push removal): a plain `git worktree remove` refuses outright
+// if the checkout has any uncommitted changes, which is exactly the
+// safety net wanted here — a worktree with nothing of value is
+// removed; one with real, never-committed work is left in place for
+// the operator to find, same spirit as Decision 5's "keep on
+// blocked/failed for inspection." No-op for a cluster-dispatched PRD
+// (no local worktree ever existed) or one that never got a worktree
+// at all.
+func (m *Manager) cleanupOrphanedWorktree(prd *PRD) {
+	if prd.ClusterProfile != "" || prd.Git.Branch == "" || prd.ProjectDir == "" {
+		return
+	}
+	if out, err := runGitIn(prd.ProjectDir, "worktree", "remove", prd.ProjectDir); err != nil {
+		log.Printf("[autonomous] prd=%s orphan worktree cleanup skipped (left for inspection, likely uncommitted content or already removed): %v\n%s", prd.ID, err, out)
+		return
+	}
+	log.Printf("[autonomous] prd=%s orphaned worktree removed (%s)", prd.ID, prd.ProjectDir)
+}
+
 func (m *Manager) recordGitCompletionFailure(prd *PRD, note string) {
 	prd.Decisions = append(prd.Decisions, Decision{At: time.Now(), Kind: "git_pr_failed", Actor: "autonomous", Note: note})
 	if err := m.store.SavePRD(prd); err != nil {
