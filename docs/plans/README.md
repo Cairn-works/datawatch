@@ -417,6 +417,23 @@ established. Not started; blocked on Stage 2.**
    `Story.ExecutionProfile` itself is a concrete, already-scoped fix
    that doesn't need the full systematic sweep designed first — worth
    landing standalone whenever reached. No plan doc written yet.
+11. **BL412** — Self-Config/Self-Modify Permission-Gate Generalization
+   (filed 2026-10-11, operator direction after `mcp.allow_self_config`
+   — the BL110/v2.4.5 gate meant to control whether an in-process AI
+   can tune its own daemon config — turned out to only guard one
+   specific MCP tool (generic `config_set`) plus a few BL220 tools
+   (detection timing, DNS channel, proxy aggregation), not `PUT
+   /api/config`, not the CLI, not `autonomous_config_set`). Operator
+   wants the underlying concept generalized across **all** mutating
+   surfaces — REST, MCP, CLI — for proper LLM sandboxing, modeled on
+   how federation already does capability/peer-scoped access control.
+   Default posture: **enabled by default** (encourage LLM-driven
+   configuration out of the box), with the hardening/restriction path
+   clearly documented for operators who want it tighter — the inverse
+   of today's single narrow gate's closed-by-default framing. No plan
+   doc yet; needs a design pass (inventory every mutation-capable
+   surface, pick one consistent gating mechanism, decide the default)
+   before queueing a position in the roadmap.
 
 **Outside the queue, handled separately, not blocking Stage 3:**
 - ~~**BL381**~~ — status-verified 2026-10-10: shipped v8.28.0 + v8.28.2
